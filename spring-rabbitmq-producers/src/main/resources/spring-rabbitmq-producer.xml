@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:rabbit="http://www.springframework.org/schema/rabbit"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context
+       https://www.springframework.org/schema/context/spring-context.xsd
+       http://www.springframework.org/schema/rabbit
+       http://www.springframework.org/schema/rabbit/spring-rabbit.xsd">
+    <!--加载配置文件-->
+    <context:property-placeholder location="classpath:rabbitmq.properties"/>
+
+    <!-- 定义rabbitmq connectionFactory -->
+    <rabbit:connection-factory id="connectionFactory" host="${rabbitmq.host}"
+                               port="${rabbitmq.port}"
+                               username="${rabbitmq.username}"
+                               password="${rabbitmq.password}"
+                               virtual-host="${rabbitmq.virtual-host}"
+                               publisher-confirms="true"
+                               publisher-returns="true"/>
+    <!--定义管理交换机、队列-->
+    <rabbit:admin connection-factory="connectionFactory"/>
+
+    <!--定义持久化队列，不存在则自动创建；不绑定到交换机则绑定到默认交换机
+    默认交换机类型为direct，名字为：""，路由键为队列的名称
+    -->
+    <rabbit:queue id="spring_queue" name="spring_queue" auto-declare="true"/>
+
+    <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~广播；所有队列都能收到消息~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+    <!--定义广播交换机中的持久化队列，不存在则自动创建-->
+    <rabbit:queue id="spring_fanout_queue_1" name="spring_fanout_queue_1" auto-declare="true"/>
+
+    <!--定义广播交换机中的持久化队列，不存在则自动创建-->
+    <rabbit:queue id="spring_fanout_queue_2" name="spring_fanout_queue_2" auto-declare="true"/>
+
+    <!--定义广播类型交换机；并绑定上述两个队列-->
+    <rabbit:fanout-exchange id="spring_fanout_exchange" name="spring_fanout_exchange" auto-declare="true">
+        <rabbit:bindings>
+            <rabbit:binding queue="spring_fanout_queue_1"/>
+            <rabbit:binding queue="spring_fanout_queue_2"/>
+        </rabbit:bindings>
+    </rabbit:fanout-exchange>
+
+    <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~通配符；*匹配一个单词，#匹配多个单词 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+    <!--定义广播交换机中的持久化队列，不存在则自动创建-->
+    <rabbit:queue id="spring_topic_queue_star" name="spring_topic_queue_star" auto-declare="true"/>
+    <!--定义广播交换机中的持久化队列，不存在则自动创建-->
+    <rabbit:queue id="spring_topic_queue_well" name="spring_topic_queue_well" auto-declare="true"/>
+    <!--定义广播交换机中的持久化队列，不存在则自动创建-->
+    <rabbit:queue id="spring_topic_queue_well2" name="spring_topic_queue_well2" auto-declare="true"/>
+
+    <rabbit:topic-exchange id="spring_topic_exchange" name="spring_topic_exchange" auto-declare="true">
+        <rabbit:bindings>
+            <rabbit:binding pattern="heima.*" queue="spring_topic_queue_star"/>
+            <rabbit:binding pattern="heima.#" queue="spring_topic_queue_well"/>
+            <rabbit:binding pattern="itcast.#" queue="spring_topic_queue_well2"/>
+        </rabbit:bindings>
+    </rabbit:topic-exchange>
+
+    <!--ttl-->
+    <rabbit:queue id="test_queue_ttl" name="test_queue_ttl">
+        <!--设置queue的参数-->
+        <rabbit:queue-arguments>
+            <!--x-message-ttl指队列的过期时间-->
+            <entry key="x-message-ttl" value="10000" value-type="java.lang.Integer"/>
+        </rabbit:queue-arguments>
+    </rabbit:queue>
+
+    <rabbit:topic-exchange name="test_exchange_ttl">
+        <rabbit:bindings>
+            <rabbit:binding pattern="ttl.#" queue="test_queue_ttl" />
+        </rabbit:bindings>
+    </rabbit:topic-exchange>
+
+    <!--死信队列：
+    1.声明正常的队列(test_queue_dlx)和交换机(test_exchange_dlx)
+    2.声明死信队列和死信交换机
+    3.正常队列绑定死信交换机
+    设置两个参数:
+    *x-dead-letter-exchange:死信交换机名称
+    *x-dead-routing-key:发送给死信交换机的routing key
+    -->
+    <rabbit:queue name="test_queue_dlx" id="test_queue_dlx" >
+        <rabbit:queue-arguments>
+            <entry key="x-dead-letter-exchange" value="exchange_dlx" />
+            <entry key="x-dead-letter-routing-key" value="dlx.hello"/>
+            <entry key="x-message-ttl" value="10000" value-type="java.lang.Integer"/>
+            <entry key="x-max-length" value="10" value-type="java.lang.Integer"/>
+        </rabbit:queue-arguments>
+    </rabbit:queue>
+    <rabbit:topic-exchange name="test_exchange_dlx">
+        <rabbit:bindings>
+            <rabbit:binding pattern="test.dlx.#" queue="test_queue_dlx" />
+        </rabbit:bindings>
+    </rabbit:topic-exchange>
+
+    <rabbit:queue name="queue_dlx" id="queue_dlx" />
+    <rabbit:topic-exchange name="exchange_dlx">
+        <rabbit:bindings>
+            <rabbit:binding pattern="dlx.#" queue="queue_dlx" />
+        </rabbit:bindings>
+    </rabbit:topic-exchange>
+
+    <!--延迟队列: TTL+死信队列
+    1.定义正常的交换机和队列
+    2.定义死信交换机和队列
+    3.绑定,设置正常队列过期时间
+    -->
+
+    <!--正常队列交换机-->
+    <rabbit:queue name="order_queue" id="order_queue" >
+        <rabbit:queue-arguments>
+            <entry key="x-dead-letter-exchange" value="order_exchange_dlx" />
+            <entry key="x-dead-letter-routing-key" value="dlx.order.hello"/>
+            <entry key="x-message-ttl" value="10000" value-type="java.lang.Integer"/>
+        </rabbit:queue-arguments>
+    </rabbit:queue>
+    <rabbit:topic-exchange name="order_exchange">
+        <rabbit:bindings>
+            <rabbit:binding pattern="order.#" queue="order_queue" />
+        </rabbit:bindings>
+    </rabbit:topic-exchange>
+
+    <!--死信队列交换机-->
+    <rabbit:queue name="order_queue_dlx" id="order_queue_dlx" />
+    <rabbit:topic-exchange name="order_exchange_dlx">
+        <rabbit:bindings>
+            <rabbit:binding pattern="dlx.order.#" queue="order_queue_dlx" />
+        </rabbit:bindings>
+    </rabbit:topic-exchange>
+
+    <!--定义rabbitTemplate对象操作可以在代码中方便发送消息-->
+    <rabbit:template id="rabbitTemplate" connection-factory="connectionFactory"/>
+</beans>

@@ -1,0 +1,4 @@
+# 项目排除路径
+/rabbit-consumer/target/
+/rabbit-producer/target/
+/rabbitmq-hello/target/
